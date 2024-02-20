@@ -12,8 +12,8 @@ from azure.storage.blob import BlobServiceClient
 
 def get_current_date():
         current_utc_timestamp = datetime.utcnow()
-        utc_timezone = pytz.timezone('UTC')
-        myt_timezone = pytz.timezone('Asia/Kuala_Lumpur')
+        utc_timezone = pytz.timezone("UTC")
+        myt_timezone = pytz.timezone("Asia/Kuala_Lumpur")
         myt_timestamp = utc_timezone.localize(current_utc_timestamp).astimezone(myt_timezone)
         formatted_current_date = myt_timestamp.strftime("%d%m%Y")
         return formatted_current_date
@@ -40,7 +40,7 @@ def download_blob(storage_account_url, container_name, local_temp_file_path, sou
     
 
 def read_local_file(local_temp_file_path):
-    all_dict = []
+    player_result = []
     with open(local_temp_file_path, "r") as json_file:
         main_json_file = json.load(json_file)
 
@@ -50,14 +50,14 @@ def read_local_file(local_temp_file_path):
             response = requests.get(url, timeout=60)
             if response.status_code == 200:
                 player_data = response.json()
-                current_season_past_fixture = player_data['history']
-                all_dict.extend(current_season_past_fixture)
+                current_season_past_fixture = player_data["history"]
+                player_result.extend(current_season_past_fixture)
     
-    return all_dict
+    return player_result
 
 
 def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_url, container_name, destination_blob_path):
-    with open(player_id_local_file_path, 'w') as local_file_player_id:
+    with open(player_id_local_file_path, "w") as local_file_player_id:
         json.dump(all_dict, local_file_player_id, indent=4)
         logging.info(f"{player_id_local_file_path} is created")
 
@@ -69,15 +69,13 @@ def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_
         blob_client.upload_blob(data, overwrite=True)
     
 
-
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+    logging.info("Python HTTP trigger function processed a request.")
 
     try:
         formatted_current_date = get_current_date()
-
         storage_account_url = "https://azfarsadev.blob.core.windows.net"
-        container_name = 'bronze'
+        container_name = "bronze"
         blob_name = f"player_metadata_{formatted_current_date}.json"
         current_season_history_file_name = f"current_season_history_{formatted_current_date}.json"
         source_blob_path = f"player_metadata/current/{formatted_current_date}/{blob_name}"
