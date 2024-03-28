@@ -15,10 +15,18 @@ def fetch_data_api(website_url):
         response = requests.get(player_team_detail_url, stream=True, timeout=2)
         response.raise_for_status()
         data = response.json()
-        return data["events"], data["teams"], data["elements"], data["element_types"]
+        processed_data = remove_key_in_position(data)
+        return processed_data["events"], processed_data["teams"], processed_data["elements"], processed_data["element_types"]
     except Exception as e:
         logging.error(f"An error occured: {e}")
         return None
+    
+
+def remove_key_in_position(position_data):
+    for position in position_data["element_types"]:
+        del position["sub_positions_locked"]
+    return position_data
+
     
 
 def create_json_data(file_path, file_name_json, data):
