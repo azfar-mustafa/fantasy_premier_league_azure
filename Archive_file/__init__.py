@@ -49,9 +49,9 @@ def copy_file_to_archive(archive_date, storage_account_url, container_name, list
                 source_blob.delete_blob()
 
 
-def delete_old_directory(storage_account_url, container_name, archive_date):
+def delete_old_directory(data_lake_url, container_name, archive_date):
     default_credential = DefaultAzureCredential()
-    datalake_service_client = DataLakeServiceClient(storage_account_url, credential=default_credential)
+    datalake_service_client = DataLakeServiceClient(account_url=data_lake_url, credential=default_credential)
     file_system_client = datalake_service_client.get_file_system_client(container_name)
     path_list = file_system_client.get_paths()
 
@@ -59,6 +59,7 @@ def delete_old_directory(storage_account_url, container_name, archive_date):
     for path in path_list:
         path_name = path.name
         parts = path_name.split("/")
+        print(parts)
         if len(parts) > 2 and parts[2] == archive_date and parts[1] == "current":
             parts_path = "/".join(parts)
             print(parts_path)
@@ -70,16 +71,18 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     storage_account_url = "https://azfarsadev.blob.core.windows.net"
+    data_lake_url = "https://azfarsadev.dfs.core.windows.net"
     storage_account_container = "bronze"
 
     try:
         x = list_blob(storage_account_url, storage_account_container)
         y = get_old_date(x)
+        
         if len(y) > 1:
             min_date = min(y)
             non_recent_date = min_date.strftime("%d%m%Y")
             copy_file_to_archive(non_recent_date, storage_account_url, storage_account_container, x)
-            delete_old_directory(storage_account_url, storage_account_container, non_recent_date)
+            delete_old_directory(data_lake_url, storage_account_container, non_recent_date)
             return func.HttpResponse(f"File date {non_recent_date} is archived.", status_code=200)
         else:
             return func.HttpResponse(f"No need to archive file.", status_code=200)
