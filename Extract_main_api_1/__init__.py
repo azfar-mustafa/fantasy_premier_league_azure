@@ -11,6 +11,7 @@ from azure.storage.blob import BlobServiceClient
 
 def fetch_data_api(website_url):
     try:
+        print("test")
         player_team_detail_url = website_url
         response = requests.get(player_team_detail_url, stream=True, timeout=2)
         response.raise_for_status()
