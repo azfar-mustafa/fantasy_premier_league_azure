@@ -72,7 +72,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     storage_account_url = "https://azfarsadev.blob.core.windows.net"
     data_lake_url = "https://azfarsadev.dfs.core.windows.net"
-    storage_account_container = "bronze"
+    storage_account_container = "fantasy-premier-league"
 
     try:
         x = list_blob(storage_account_url, storage_account_container)
