@@ -50,7 +50,7 @@ def create_blob_directory(local_filepath, file_name_json, attribute_name, curren
         default_credential = DefaultAzureCredential()
         blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
         container_client = blob_service_client.get_container_client(storage_account_container)
-        blob_client = container_client.get_blob_client(f"{attribute_name}/current/{current_date}/{file_name_json}")
+        blob_client = container_client.get_blob_client(f"landing/{attribute_name}/current/{current_date}/{file_name_json}")
         with open(f"{local_filepath}/{file_name_json}", "rb") as data:
             blob_client.upload_blob(data, overwrite=True)
         return True
@@ -65,7 +65,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         storage_account_url = "https://azfarsadev.blob.core.windows.net"
-        storage_account_container = "bronze"
+        storage_account_container = "fantasy-premier-league"
         url_list = "https://fantasy.premierleague.com/api/bootstrap-static/"
         metadata = ["events_metadata", "teams_metadata", "player_metadata", "position_metadata"]
         current_date = convert_timestamp_to_myt_date()
