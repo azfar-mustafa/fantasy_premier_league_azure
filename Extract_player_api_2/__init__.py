@@ -75,11 +75,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         formatted_current_date = get_current_date()
         storage_account_url = "https://azfarsadev.blob.core.windows.net"
-        container_name = "bronze"
+        container_name = "fantasy-premier-league"
         blob_name = f"player_metadata_{formatted_current_date}.json"
         current_season_history_file_name = f"current_season_history_{formatted_current_date}.json"
-        source_blob_path = f"player_metadata/current/{formatted_current_date}/{blob_name}"
-        destination_blob_path = f"current_season_history/current/{formatted_current_date}/{current_season_history_file_name}"
+        source_blob_path = f"landing/player_metadata/current/{formatted_current_date}/{blob_name}"
+        destination_blob_path = f"landing/current_season_history/current/{formatted_current_date}/{current_season_history_file_name}"
         
         local_file_path = tempfile.gettempdir()
         local_temp_file_path = os.path.join(local_file_path, blob_name)
