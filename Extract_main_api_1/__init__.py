@@ -1,8 +1,8 @@
 import logging
+import os
 import tempfile
 import azure.functions as func
 import requests
-import pytz
 import json
 from datetime import datetime
 from azure.identity import DefaultAzureCredential
@@ -12,7 +12,6 @@ from util.common_func import convert_timestamp_to_myt_date
 
 def fetch_data_api(website_url):
     try:
-        print("test")
         player_team_detail_url = website_url
         response = requests.get(player_team_detail_url, stream=True, timeout=2)
         response.raise_for_status()
@@ -56,8 +55,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     try:
-        storage_account_url = "https://azfarsadev.blob.core.windows.net"
-        storage_account_container = "fantasy-premier-league"
+        
+        storage_account_url = os.getenv("StorageAccountUrl")
+        storage_account_container = os.getenv("StorageAccountContainer")
+        if not storage_account_url or not storage_account_container:
+            raise ValueError("Storage account URL or container not set in environment variables")
+        
         url_list = "https://fantasy.premierleague.com/api/bootstrap-static/"
         metadata = ["events_metadata", "teams_metadata", "player_metadata", "position_metadata"]
         current_date = convert_timestamp_to_myt_date()
