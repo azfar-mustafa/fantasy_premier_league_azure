@@ -4,6 +4,7 @@ import pyarrow as pa
 import azure.functions as func
 import logging
 from util.common_func import convert_timestamp_to_myt_date
+import os
 
 storage_options = {
         'AZURE_STORAGE_ACCOUNT_NAME': 'azfarsadev',
@@ -18,16 +19,19 @@ storage_options = {
         #'AZURE_STORAGE_USE_EMULATOR': '',
     }
 
-def read_bronze_file():
-    azure_path = "abfss://fantasy-premier-league@azfarsadev.dfs.core.windows.net/bronze/current_season_history"
+def read_bronze_file(ingest_date):
+    container_name = os.getenv("StorageAccountContainer")
+    adls_url = os.getenv("DataLakeUrl")
+    azure_path = f"abfss://{container_name}@{adls_url}/bronze/current_season_history"
     dt = DeltaTable(azure_path, storage_options=storage_options)
     dataset = dt.to_pyarrow_dataset()
     quack = duckdb.arrow(dataset)
-    data = quack.filter("ingest_date = '17072024'")
+    data = quack.filter(f"ingest_date = '{ingest_date}'")
     return data
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    data_length = len(read_bronze_file())
+    current_date = convert_timestamp_to_myt_date()
+    data_length = len(read_bronze_file(current_date))
     logging.info(f"Data length is {data_length}")
     return func.HttpResponse(f"Process Completed {data_length}", status_code=200)

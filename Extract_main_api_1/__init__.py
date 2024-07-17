@@ -4,7 +4,6 @@ import tempfile
 import azure.functions as func
 import requests
 import json
-from datetime import datetime
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from util.common_func import convert_timestamp_to_myt_date
