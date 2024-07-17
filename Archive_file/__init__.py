@@ -1,4 +1,5 @@
 import logging
+import os
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.storage.filedatalake import DataLakeServiceClient
@@ -70,21 +71,24 @@ def delete_old_directory(data_lake_url, container_name, archive_date):
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
-    storage_account_url = "https://azfarsadev.blob.core.windows.net"
-    data_lake_url = "https://azfarsadev.dfs.core.windows.net"
-    storage_account_container = "fantasy-premier-league"
+    storage_account_url = os.getenv("StorageAccountUrl")
+    data_lake_url = os.getenv("DataLakeUrl")
+    storage_account_container = os.getenv("StorageAccountContainer")
 
     try:
-        x = list_blob(storage_account_url, storage_account_container)
-        y = get_old_date(x)
+        blob_list = list_blob(storage_account_url, storage_account_container)
+        blob_list_date = get_old_date(blob_list)
         
-        if len(y) > 1:
-            min_date = min(y)
+        if len(blob_list_date) > 1:
+            min_date = min(blob_list_date)
             non_recent_date = min_date.strftime("%d%m%Y")
             copy_file_to_archive(non_recent_date, storage_account_url, storage_account_container, x)
             delete_old_directory(data_lake_url, storage_account_container, non_recent_date)
+            logging.info(f"File date {non_recent_date} is archived.")
             return func.HttpResponse(f"File date {non_recent_date} is archived.", status_code=200)
         else:
+            logging.info("No need to archive file")
             return func.HttpResponse(f"No need to archive file.", status_code=200)
     except Exception as e:
+        logging.error(f"An error occured: {str(e)}")
         return func.HttpResponse(f"An error occured: {str(e)}", status_code=500)
