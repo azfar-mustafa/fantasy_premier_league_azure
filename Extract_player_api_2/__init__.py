@@ -63,7 +63,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     try:
-        formatted_current_date = convert_timestamp_to_myt_date()
+        #formatted_current_date = convert_timestamp_to_myt_date()
+        formatted_current_date = '05072024'
         storage_account_url = os.getenv("StorageAccountUrl")
         storage_account_container = os.getenv("StorageAccountContainer")
         blob_name = f"player_metadata_{formatted_current_date}.json"
