@@ -7,9 +7,8 @@ import azure.functions as func
 from datetime import datetime
 
 
-def list_blob(storage_account_url, container_name):
-    default_credential = DefaultAzureCredential()
-    blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
+def list_blob(storage_account_url, container_name, credential):
+    blob_service_client = BlobServiceClient(storage_account_url, credential=credential)
     container_client = blob_service_client.get_container_client(container_name)
     blob_list = container_client.list_blobs()
 
@@ -27,13 +26,13 @@ def get_old_date(list_of_files):
         parts = path.split('/')
         if len(parts) > 2 and parts[2].isdigit() and "current" in parts:
             date_counts.add(parts[2])
-    datetime_dates = [datetime.strptime(date, "%d%m%Y") for date in date_counts]
-    return datetime_dates
+    if date_counts:
+        return min(date_counts)
+    return None
 
 
-def copy_file_to_archive(archive_date, storage_account_url, container_name, list_of_files):
-    default_credential = DefaultAzureCredential()
-    blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
+def copy_file_to_archive(archive_date, storage_account_url, container_name, list_of_files, credential):
+    blob_service_client = BlobServiceClient(storage_account_url, credential=credential)
     container_client = blob_service_client.get_container_client(container_name)
 
     # Reference - https://stackoverflow.com/questions/32500935/python-how-to-move-or-copy-azure-blob-from-one-container-to-another
@@ -50,9 +49,8 @@ def copy_file_to_archive(archive_date, storage_account_url, container_name, list
                 source_blob.delete_blob()
 
 
-def delete_old_directory(data_lake_url, container_name, archive_date):
-    default_credential = DefaultAzureCredential()
-    datalake_service_client = DataLakeServiceClient(account_url=data_lake_url, credential=default_credential)
+def delete_old_directory(data_lake_url, container_name, archive_date, credential):
+    datalake_service_client = DataLakeServiceClient(account_url=data_lake_url, credential=credential)
     file_system_client = datalake_service_client.get_file_system_client(container_name)
     path_list = file_system_client.get_paths()
 
@@ -74,18 +72,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     storage_account_url = os.getenv("StorageAccountUrl")
     data_lake_url = os.getenv("DataLakeUrl")
     storage_account_container = os.getenv("StorageAccountContainer")
+    default_credential = DefaultAzureCredential()
 
     try:
-        blob_list = list_blob(storage_account_url, storage_account_container)
-        blob_list_date = get_old_date(blob_list)
+        blob_list = list_blob(storage_account_url, storage_account_container, default_credential)
+        oldest_date = get_old_date(blob_list)
         
-        if len(blob_list_date) > 1:
-            min_date = min(blob_list_date)
-            non_recent_date = min_date.strftime("%d%m%Y")
-            copy_file_to_archive(non_recent_date, storage_account_url, storage_account_container, x)
-            delete_old_directory(data_lake_url, storage_account_container, non_recent_date)
-            logging.info(f"File date {non_recent_date} is archived.")
-            return func.HttpResponse(f"File date {non_recent_date} is archived.", status_code=200)
+        if oldest_date:
+            copy_file_to_archive(oldest_date, storage_account_url, storage_account_container, blob_list, default_credential)
+            delete_old_directory(data_lake_url, storage_account_container, oldest_date, default_credential)
+            logging.info(f"File date {oldest_date} is archived.")
+            return func.HttpResponse(f"File date {oldest_date} is archived.", status_code=200)
         else:
             logging.info("No need to archive file")
             return func.HttpResponse(f"No need to archive file.", status_code=200)
