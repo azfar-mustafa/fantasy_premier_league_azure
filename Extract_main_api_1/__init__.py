@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
+from util.common_func import convert_timestamp_to_myt_date
 
 
 def fetch_data_api(website_url):
@@ -34,15 +35,6 @@ def create_json_data(file_path, file_name_json, data):
     with open(f"{file_path}/{file_name_json}", "w") as file:
         json.dump(data, file, indent=4)
     logging.info(f"{file_path} data is created")
-
-
-def convert_timestamp_to_myt_date():
-    current_utc_timestamp = datetime.utcnow()
-    utc_timezone = pytz.timezone("UTC")
-    myt_timezone = pytz.timezone("Asia/Kuala_Lumpur")
-    myt_timestamp = utc_timezone.localize(current_utc_timestamp).astimezone(myt_timezone)
-    formatted_timestamp = myt_timestamp.strftime("%d%m%Y")
-    return formatted_timestamp
 
 
 def create_blob_directory(local_filepath, file_name_json, attribute_name, current_date, storage_account_url, storage_account_container):
