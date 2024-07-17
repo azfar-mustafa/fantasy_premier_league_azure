@@ -65,7 +65,7 @@ jobs:
         enable-oryx-build: true
 
   deploy-to-prod:
-    needs: deploy-to-dev
+    needs: build-and-deploy
     runs-on: ubuntu-latest
     environment: prod
     steps:
