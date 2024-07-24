@@ -31,12 +31,18 @@ def check_for_null(dataset):
     columns = ['element', 'fixture', 'opponent_team', 'kickoff_time', 'team_h_score', 'team_a_score', 'round', 'minutes', 'total_points', 'value', 'transfers_balance', 'selected', 'transfers_in','transfers_out','goals_scored', 'assists', 'clean_sheets']
 
     # Create a SQL query to count nulls for all columns
-    null_counts_query = "+".join([f"SUM(CASE WHEN {col} IS NULL THEN 1 ELSE 0 END) " for col in columns])
-    total_count_query = f"SELECT ({null_counts_query}) as 'total' FROM data_table"
+    null_counts_query = "OR".join([f" {col} IS NULL " for col in columns])
+    has_null_query = f"""
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 
+            FROM data_table
+            WHERE {null_counts_query}
+        ) THEN 1 ELSE 0 END as has_null
+        """
 
     # Execute the query
-    result = con.execute(f"{total_count_query}").df().iloc[0]
-    total_nulls = int(result['total'])
+    result = con.execute(f"{has_null_query}").fetchone()
+    total_nulls = int(result[0])
 
     return total_nulls
 
@@ -50,7 +56,9 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     data_length = read_bronze_file(current_date, password)
 
     column_name = check_for_null(data_length)
+    #column_name = 1
     if column_name != 0:
         logging.error("There is null")
-    logging.info(f"There is no null in the datasets")
+    else:
+        logging.info(f"There is no null in the datasets")
     return func.HttpResponse(f"Process Completed {column_name}", status_code=200)
