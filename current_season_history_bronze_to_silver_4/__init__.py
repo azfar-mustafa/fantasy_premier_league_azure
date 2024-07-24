@@ -51,12 +51,10 @@ def check_for_null(dataset):
 def main(req: func.HttpRequest) -> func.HttpResponse:
 
     password = create_storage_options(os.getenv('KeyVault'))
-    #current_date = convert_timestamp_to_myt_date()
-    current_date = '17072024'
+    current_date = convert_timestamp_to_myt_date()
     data_length = read_bronze_file(current_date, password)
 
     column_name = check_for_null(data_length)
-    #column_name = 1
     if column_name != 0:
         logging.error("There is null")
     else:
