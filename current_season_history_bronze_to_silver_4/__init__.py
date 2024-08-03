@@ -1,18 +1,20 @@
-from deltalake import DeltaTable
+from deltalake import DeltaTable, write_deltalake
 import duckdb
 import pyarrow as pa
+from pyarrow import interchange
+import pyarrow.compute as pc
 import azure.functions as func
 import logging
 from util.common_func import convert_timestamp_to_myt_date, create_storage_options
 import os
+from datetime import datetime
 
 
-def read_bronze_file(ingest_date, credential):
-    
+def read_bronze_file(ingest_date, credential, layer):
     container_name = os.getenv("StorageAccountContainer")
     StorageAccountName = os.getenv("StorageAccountName")
-    azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/bronze/current_season_history"
-    logging.info(f"{azure_path}")
+    azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/{layer}/current_season_history"
+    logging.info(f"Reading {azure_path}")
     dt = DeltaTable(azure_path, storage_options=credential)
     dataset = dt.to_pyarrow_dataset()
     con = duckdb.connect()
@@ -21,6 +23,7 @@ def read_bronze_file(ingest_date, credential):
     # https://www.gooddata.com/blog/duckdb-meets-apache-arrow/
     query = f"SELECT * FROM dataset WHERE ingest_date = {ingest_date}"
     data_df = con.execute(query).arrow()
+    logging.info(f"Created current season history dataset for ingest date = {ingest_date}")
     return data_df
 
 
@@ -48,15 +51,33 @@ def check_for_null(dataset):
 
 
 
+def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, layer):
+    try:
+        write_deltalake(f"abfss://{container_name}@{adls_url}.dfs.core.windows.net/{layer}/current_season_history", dataset, storage_options=storage_options, mode='append', schema_mode='merge', engine='rust')
+        logging.info(f"Dataset has been inserted into {layer} layer")
+    except Exception as e:
+        logging.error(f"An error occured: {str(e)}")
+
+
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        adls_url = os.getenv("StorageAccountName")
+        container_name = os.getenv("StorageAccountContainer")
+        password = create_storage_options(os.getenv('KeyVault'))
+        current_date = convert_timestamp_to_myt_date()
+        bronze_layer = 'bronze'
+        silver_layer = 'silver'
+        data_length = read_bronze_file(current_date, password, bronze_layer)
 
-    password = create_storage_options(os.getenv('KeyVault'))
-    current_date = convert_timestamp_to_myt_date()
-    data_length = read_bronze_file(current_date, password)
+        column_null_check = check_for_null(data_length)
+        if column_null_check != 0:
+            logging.error("There is null")
+        else:
+            logging.info(f"There is no null in the datasets")
+            write_raw_to_bronze(data_length, password, container_name, adls_url, silver_layer)
+            logging.info(f"Current season history data for date {current_date} has been written to silver layer")
 
-    column_name = check_for_null(data_length)
-    if column_name != 0:
-        logging.error("There is null")
-    else:
-        logging.info(f"There is no null in the datasets")
-    return func.HttpResponse(f"Process Completed {column_name}", status_code=200)
+        return func.HttpResponse(f"Process Completed", status_code=200)
+    except Exception as e:
+        return func.HttpResponse(f"An error occured: {str(e)}", status_code=500)
