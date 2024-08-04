@@ -3,6 +3,7 @@ import duckdb
 import pyarrow as pa
 from pyarrow import interchange
 import pyarrow.compute as pc
+import polars as pl
 import azure.functions as func
 import logging
 from util.common_func import convert_timestamp_to_myt_date, create_storage_options
@@ -58,6 +59,32 @@ def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, laye
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
 
+
+def create_season_value(file_date):
+    year = int(file_date[4:])
+    month = int(file_date[2:4])
+
+    month_a_list = [8,9,10,11,12]
+
+    if month in month_a_list:
+        year_a = year + 1
+        actual_season = str(year) + '/' + str(year_a)
+        return actual_season
+    else:
+        actual_year = year - 1
+        actual_season = str(actual_year) + '/' + str(year)
+        return actual_season
+
+
+
+def add_season_to_dataset(dataset):
+    
+    pass
+
+
+def add_unique_column(dataset):
+    new_dataset = pl.from_arrow(dataset)
+    return new_dataset
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
