@@ -77,9 +77,19 @@ def create_season_value(file_date):
 
 
 
-def add_season_to_dataset(dataset):
-    
-    pass
+def add_season_to_dataset(dataset, season_year):
+    #duckdb.create_function('create_season_value', create_season_value, return_type='VARCHAR')
+    con = duckdb.connect(':memory:')
+    con.register('dataset', dataset)
+    con.create_function('create_season_value', lambda: create_season_value(season_year), return_type='VARCHAR')
+    query = f"""
+    SELECT *
+    , create_season_value() AS season
+    FROM dataset
+    """
+    result = con.execute(query)
+
+    return result.fetch_arrow_table()
 
 
 def add_unique_column(dataset):
@@ -92,7 +102,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         adls_url = os.getenv("StorageAccountName")
         container_name = os.getenv("StorageAccountContainer")
         password = create_storage_options(os.getenv('KeyVault'))
-        current_date = convert_timestamp_to_myt_date()
+        #current_date = convert_timestamp_to_myt_date()
+        current_date = '17072024'
         bronze_layer = 'bronze'
         silver_layer = 'silver'
         data_length = read_bronze_file(current_date, password, bronze_layer)
@@ -102,8 +113,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             logging.error("There is null")
         else:
             logging.info(f"There is no null in the datasets")
-            write_raw_to_bronze(data_length, password, container_name, adls_url, silver_layer)
+            new_dataset = add_season_to_dataset(data_length, current_date)
+            logging.info(f"Added season column in dataset")
+            write_raw_to_bronze(new_dataset, password, container_name, adls_url, silver_layer)
             logging.info(f"Current season history data for date {current_date} has been written to silver layer")
+        logging.info(f"{type(data_length)}")
 
         return func.HttpResponse(f"Process Completed", status_code=200)
     except Exception as e:
