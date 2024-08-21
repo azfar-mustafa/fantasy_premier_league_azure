@@ -24,6 +24,22 @@ def copy_file_to_archive(service_client, container_name: str, data_source_type, 
         logging.error(f"An error occurred while copying and deleting the file: {str(e)}")
 
 
+def delete_old_directory(datalake_service_client, container_name, archive_date, data_source_type):
+    file_system_client = datalake_service_client.get_file_system_client(container_name)
+    path_list = file_system_client.get_paths()
+
+    # Reference - https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/storage/azure-storage-file-datalake/samples/datalake_samples_file_system.py
+    for path in path_list:
+        path_name = path.name
+        parts = path_name.split("/")
+        logging.info(f"file paths - {parts} {len(parts)}")
+        if len(parts) > 3 and parts[2] == "current" and parts[3] == archive_date and parts[1] == data_source_type and parts[0] == "landing":
+            parts_path = "/".join(parts)
+            logging.info(f"file path - {parts_path}")
+            file_system_to_delete = file_system_client.get_directory_client(parts_path)
+            file_system_to_delete.delete_directory()
+
+
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
@@ -51,6 +67,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         copy_file_to_archive(service_client, storage_account_container, data_source_type, file_date, file_name)
+        delete_old_directory(service_client, storage_account_container, file_date, data_source_type)
         return func.HttpResponse(f"Process Completed.", status_code=200)
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
