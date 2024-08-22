@@ -42,6 +42,9 @@ def read_local_file(local_temp_file_path):
                 player_data = response.json()
                 current_season_past_fixture = player_data["history"]
                 player_result.extend(current_season_past_fixture)
+                logging.info(f"Player id - {player_id} is extracted")
+
+    logging.info("Current season history player data has been extracted")
     
     return player_result
 
@@ -57,19 +60,28 @@ def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_
     blob_client = container_client.get_blob_client(destination_blob_path)
     with open(f"{player_id_local_file_path}", "rb") as data:
         blob_client.upload_blob(data, overwrite=True)
+
+    logging.info(f"Current season history data has been uploaded to {destination_blob_path}")
     
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     try:
-        formatted_current_date = convert_timestamp_to_myt_date()
+        ingest_date = req.params.get('ingest_date')
+
+        if not ingest_date:
+            return func.HttpResponse(
+                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be ddMMyyyy",
+                status_code=400
+            )
+        
         storage_account_url = os.getenv("StorageAccountUrl")
         storage_account_container = os.getenv("StorageAccountContainer")
-        blob_name = f"player_metadata_{formatted_current_date}.json"
-        current_season_history_file_name = f"current_season_history_{formatted_current_date}.json"
-        source_blob_path = f"landing/player_metadata/current/{formatted_current_date}/{blob_name}"
-        destination_blob_path = f"landing/current_season_history/current/{formatted_current_date}/{current_season_history_file_name}"
+        blob_name = f"player_metadata_{ingest_date}.json"
+        current_season_history_file_name = f"current_season_history_{ingest_date}.json"
+        source_blob_path = f"landing/player_metadata/current/{ingest_date}/{blob_name}"
+        destination_blob_path = f"landing/current_season_history/current/{ingest_date}/{current_season_history_file_name}"
         
         local_file_path = tempfile.gettempdir()
         local_temp_file_path = os.path.join(local_file_path, blob_name)
