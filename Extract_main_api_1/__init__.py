@@ -46,7 +46,6 @@ def create_blob_directory(local_filepath, file_name_json, attribute_name, curren
         return True
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
-        return False
 
    
 
@@ -54,23 +53,32 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     try:
+
+        ingest_date = req.params.get('ingest_date')
+
+        if not ingest_date:
+            return func.HttpResponse(
+                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be ddMMyyyy",
+                status_code=400
+            )
         
         storage_account_url = os.getenv("StorageAccountUrl")
+        logging.info(f"{storage_account_url}")
         storage_account_container = os.getenv("StorageAccountContainer")
+        logging.info(f"{storage_account_container}")
         if not storage_account_url or not storage_account_container:
             raise ValueError("Storage account URL or container not set in environment variables")
         
         url_list = "https://fantasy.premierleague.com/api/bootstrap-static/"
-        metadata = ["events_metadata", "teams_metadata", "player_metadata", "position_metadata"]
-        current_date = convert_timestamp_to_myt_date()
+        metadata = ["events_metadata", "team_metadata", "player_metadata", "position_metadata"]
         local_filepath = tempfile.gettempdir()
         data = fetch_data_api(url_list)
         if data:
                 zipped_api = zip(metadata, data)
                 for attribute_name,data in zipped_api:
-                    file_name_json = f"{attribute_name}_{current_date}.json"
+                    file_name_json = f"{attribute_name}_{ingest_date}.json"
                     create_json_data(local_filepath, file_name_json, data)
-                    create_blob_directory(local_filepath, file_name_json, attribute_name, current_date, storage_account_url, storage_account_container)
+                    create_blob_directory(local_filepath, file_name_json, attribute_name, ingest_date, storage_account_url, storage_account_container)
         return func.HttpResponse(f"Data from external API ingested successfully.", status_code=200)
     except Exception as e:
         return func.HttpResponse(f"An error occured: {str(e)}", status_code=500)
