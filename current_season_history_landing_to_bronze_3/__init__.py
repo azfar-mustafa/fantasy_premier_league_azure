@@ -72,10 +72,16 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
     data_source_type = req.params.get('data_source')
+    file_date = req.params.get('file_date')
 
     if not data_source_type:
         return func.HttpResponse(
             "No parameter supplied. Please provide a 'data_source' parameter. Input could be either current_season_history or player_metadata or team_metadata or position_metadata",
+            status_code=400
+        )
+    elif not file_date:
+        return func.HttpResponse(
+            "No parameter supplied. Please provide a 'file_date' based on the file to be ingested. Date format should be ddMMyyyy",
             status_code=400
         )
 
@@ -83,16 +89,16 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         container_name = os.getenv("StorageAccountContainer")
         adls_url = os.getenv("DataLakeUrl")
         adls_url_v2 = os.getenv("DataLakeUrllll")
-        current_date = convert_timestamp_to_myt_date()
-        #current_date = '05072024'
-        file_name = f"{data_source_type}_{current_date}.json"
+        #file_date = convert_timestamp_to_myt_date()
+        #file_date = '05072024'
+        file_name = f"{data_source_type}_{file_date}.json"
         azure_dev_key_vault_url = os.getenv("KeyVault")
         credentials = DefaultAzureCredential()
         service_client = DataLakeServiceClient(account_url=adls_url, credential=credentials)
         password = create_storage_options(azure_dev_key_vault_url)
-        directory_client = service_client.get_file_system_client(container_name).get_directory_client(f"landing/{data_source_type}/current/{current_date}")
+        directory_client = service_client.get_file_system_client(container_name).get_directory_client(f"landing/{data_source_type}/current/{file_date}")
         current_season_dataset = read_file_from_adls(directory_client, file_name)
-        current_season_dataset_new = add_load_date_column(current_season_dataset, current_date)
+        current_season_dataset_new = add_load_date_column(current_season_dataset, file_date)
         if data_source_type == "player_metadata":
             player_metadata_dataset = handle_player_metadata_column(current_season_dataset_new)
             write_raw_to_bronze(player_metadata_dataset, password, container_name, adls_url_v2, data_source_type)
