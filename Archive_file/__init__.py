@@ -32,10 +32,9 @@ def delete_old_directory(datalake_service_client, container_name, archive_date, 
     for path in path_list:
         path_name = path.name
         parts = path_name.split("/")
-        logging.info(f"file paths - {parts} {len(parts)}")
         if len(parts) > 3 and parts[2] == "current" and parts[3] == archive_date and parts[1] == data_source_type and parts[0] == "landing":
             parts_path = "/".join(parts)
-            logging.info(f"file path - {parts_path}")
+            logging.info(f"Folder to be deleted - {parts_path}")
             file_system_to_delete = file_system_client.get_directory_client(parts_path)
             file_system_to_delete.delete_directory()
 
