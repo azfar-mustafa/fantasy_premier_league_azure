@@ -23,7 +23,7 @@ def download_blob(storage_account_url, container_name, local_temp_file_path, sou
 
         logging.info(f"File {source_blob_path} has been downloaded locally")
 
-        return local_file
+        return True
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
         return False
@@ -31,27 +31,33 @@ def download_blob(storage_account_url, container_name, local_temp_file_path, sou
 
 def read_local_file(local_temp_file_path):
     player_result = []
-    with open(local_temp_file_path, "r") as json_file:
-        main_json_file = json.load(json_file)
+    try:
+        with open(local_temp_file_path, "r") as json_file:
+            main_json_file = json.load(json_file)
 
-    for id_player in main_json_file:
-            player_id = id_player.get("id")
-            url = f"https://fantasy.premierleague.com/api/element-summary/{player_id}/"
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200:
-                player_data = response.json()
-                current_season_past_fixture = player_data["history"]
-                player_result.extend(current_season_past_fixture)
-                logging.info(f"Player id - {player_id} is extracted")
+        for id_player in main_json_file:
+                player_id = id_player.get("id")
+                url = f"https://fantasy.premierleague.com/api/element-summary/{player_id}/"
+                response = requests.get(url, timeout=60)
+                if response.status_code == 200:
+                    player_data = response.json()
+                    current_season_past_fixture = player_data["history"]
+                    player_result.extend(current_season_past_fixture)
+                    logging.info(f"Player id - {player_id} is extracted")
 
-    logging.info("Current season history player data has been extracted")
+        logging.info("Current season history player data has been extracted")
     
-    return player_result
+        return player_result
+    except Exception as e:
+        logging.error(f"Error in read_local_file: {str(e)}")
+        raise
 
 
 def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_url, container_name, destination_blob_path):
     with open(player_id_local_file_path, "w") as local_file_player_id:
-        json.dump(all_dict, local_file_player_id, indent=4)
+        for item in all_dict:
+            json_line = json.dumps(item)
+            local_file_player_id.write(json_line + '\n')
         logging.info(f"{player_id_local_file_path} is created")
 
     default_credential = DefaultAzureCredential()

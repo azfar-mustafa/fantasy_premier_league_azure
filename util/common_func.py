@@ -47,10 +47,10 @@ def create_storage_options(azure_dev_key_vault_url):
     client_id, client_secret, client_tenant_id = get_secret_value(azure_dev_key_vault_url)
 
     storage_options = {
-        'AZURE_STORAGE_ACCOUNT_NAME': os.getenv("StorageAccountName"),
-        'AZURE_STORAGE_CLIENT_ID': client_id,
-        'AZURE_STORAGE_CLIENT_SECRET': client_secret,
-        'AZURE_STORAGE_TENANT_ID': client_tenant_id,
+        'azure_storage_account_name': os.getenv("StorageAccountName"),
+        'azure_storage_client_id': client_id,
+        'azure_storage_client_secret': client_secret,
+        'azure_storage_tenant_id': client_tenant_id,
     }
 
     return storage_options

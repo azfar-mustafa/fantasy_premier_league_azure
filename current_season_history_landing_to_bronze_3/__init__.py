@@ -7,8 +7,8 @@ import logging
 from deltalake import write_deltalake
 from azure.identity import DefaultAzureCredential
 import pyarrow as pa
-
 from util.common_func import convert_timestamp_to_myt_date, create_storage_options
+import polars as pl
 
 
 def read_file_from_adls(directory_client, file_name):
@@ -17,6 +17,15 @@ def read_file_from_adls(directory_client, file_name):
     downloaded_bytes = download.readall() # Output is in raw bytes
     logging.info("File is read from ADLS")
     return pd.read_json(BytesIO(downloaded_bytes))
+
+
+def read_file_from_adls_using_polars(credential, data_source, ingest_date):
+    container_name = os.getenv("StorageAccountContainer")
+    StorageAccountName = os.getenv("StorageAccountName")
+    azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/landing/{data_source}/current/{ingest_date}/"
+    df = pl.read_ndjson(azure_path, storage_options=credential)
+
+    return df
 
 
 def handle_player_metadata_column(dataset):
@@ -35,28 +44,53 @@ def handle_player_metadata_column(dataset):
 
 def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, data_source):
     try:
-        pyarrow_dataset = pa.Table.from_pandas(dataset)
-        write_deltalake(f"abfss://{container_name}@{adls_url}/bronze/{data_source}", pyarrow_dataset, storage_options=storage_options, mode='append', schema_mode='merge', engine='rust')
+        dataset.write_delta(
+            f"abfss://{container_name}@{adls_url}/bronze/{data_source}",
+            mode="overwrite",
+            delta_write_options={"schema_mode": "overwrite"},
+            storage_options=storage_options
+        )
+        #pyarrow_dataset = pa.Table.from_pandas(dataset)
+        #write_deltalake(f"abfss://{container_name}@{adls_url}/bronze/{data_source}", pyarrow_dataset, storage_options=storage_options, mode='append', schema_mode='merge', engine='rust')
         logging.info("Dataset has been inserted into bronze layer")
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
 
 
 def add_load_date_column(football_dataframe, ingest_date):
-    football_dataframe['ingest_date'] = ingest_date
+    df = football_dataframe.with_columns([
+        pl.lit(ingest_date).alias('ingest_date')
+    ])
     logging.info(f"Ingest date column with value {ingest_date} has been added")
-    return football_dataframe
+    
+    return df
 
 
 def handle_inconsistent_columns(df, columns_to_fix):
     for column in columns_to_fix:
-        # Try to convert to float64, if fails, keep as is
         try:
-            df[column] = df[column].astype('float64')
+            # Try to convert to float, if fails, keep as is
+            df = df.with_columns([
+                pl.col(column).fill_null(0).cast(pl.Float64).alias(column)  # Cast column to float64
+            ])
             logging.info(f"Converted column {column} to float")
-        except ValueError:
+        except Exception as e:
             # If conversion fails, we'll keep the column as is and log a warning
-            logging.warning(f"Could not convert column {column} to float64. Keeping original data type.")
+            logging.warning(f"Could not convert column {column} to float64. Keeping original data type. Error: {e}")
+    return df
+
+
+def handle_inconsistent_columns_new(df):
+    for column in df.columns:
+        try:
+            # Replace Nulls with 'null' and cast to string (Utf8)
+            df = df.with_columns([
+                pl.col(column).fill_null("null").cast(pl.Utf8).alias(column)
+            ])
+            logging.info(f"Converted column {column} to string")
+        except Exception as e:
+            # If conversion fails, log a warning and keep the original data type
+            logging.warning(f"Could not convert column {column} to string. Keeping original data type. Error: {e}")
     return df
 
 
@@ -92,19 +126,23 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         #file_date = convert_timestamp_to_myt_date()
         #file_date = '05072024'
         file_name = f"{data_source_type}_{file_date}.json"
-        azure_dev_key_vault_url = os.getenv("KeyVault")
-        credentials = DefaultAzureCredential()
-        service_client = DataLakeServiceClient(account_url=adls_url, credential=credentials)
-        password = create_storage_options(azure_dev_key_vault_url)
-        directory_client = service_client.get_file_system_client(container_name).get_directory_client(f"landing/{data_source_type}/current/{file_date}")
-        current_season_dataset = read_file_from_adls(directory_client, file_name)
-        current_season_dataset_new = add_load_date_column(current_season_dataset, file_date)
+        #azure_dev_key_vault_url = os.getenv("KeyVault")
+
+        #credentials = DefaultAzureCredential()
+        #service_client = DataLakeServiceClient(account_url=adls_url, credential=credentials)
+        #password = create_storage_options(azure_dev_key_vault_url)
+        password = create_storage_options(os.getenv('KeyVault'))
+        #print(password)
+        x = read_file_from_adls_using_polars(password, data_source_type, file_date)
+        #directory_client = service_client.get_file_system_client(container_name).get_directory_client(f"landing/{data_source_type}/current/{file_date}")
+        #current_season_dataset = read_file_from_adls(directory_client, file_name)
+        current_season_dataset_new = add_load_date_column(x, file_date)
         if data_source_type == "player_metadata":
-            player_metadata_dataset = handle_player_metadata_column(current_season_dataset_new)
+            player_metadata_dataset = handle_inconsistent_columns_new(current_season_dataset_new)
             write_raw_to_bronze(player_metadata_dataset, password, container_name, adls_url_v2, data_source_type)
         else:
-            check_data_types(current_season_dataset_new)
-            write_raw_to_bronze(current_season_dataset_new, password, container_name, adls_url_v2, data_source_type)
+            player_metadata_dataset = handle_inconsistent_columns_new(current_season_dataset_new)
+            write_raw_to_bronze(player_metadata_dataset, password, container_name, adls_url_v2, data_source_type)
     
         return func.HttpResponse(f"Data has been uploaded into bronze layer for data source - {data_source_type}", status_code=200)
     

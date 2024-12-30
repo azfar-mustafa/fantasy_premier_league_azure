@@ -30,8 +30,13 @@ def remove_key_in_position(position_data):
     
 
 def create_json_data(file_path, file_name_json, data):
+    data_to_write = data if isinstance(data, list) else [data]
+
     with open(f"{file_path}/{file_name_json}", "w") as file:
-        json.dump(data, file, indent=4)
+        for item in data_to_write:
+            json_line = json.dumps(item)
+            file.write(json_line + '\n')
+            
     logging.info(f"{file_path} data is created")
 
 
