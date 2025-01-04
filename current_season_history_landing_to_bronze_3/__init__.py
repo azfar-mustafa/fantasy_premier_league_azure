@@ -33,8 +33,6 @@ def handle_player_metadata_column(dataset):
         columns_to_fix = ['expected_goals_per_90', 'saves_per_90', 'expected_assists_per_90', 'expected_goal_involvements_per_90', 'expected_goals_conceded_per_90', 'goals_conceded_per_90', 'starts_per_90', 'clean_sheets_per_90']
         # Handle the inconsistent columns
         player_metadata_fixed_dataset = handle_inconsistent_columns(dataset, columns_to_fix)
-        # Convert pandas DataFrame to PyArrow Table
-        #player_metadata_fixed_dataset_pyarrow = pa.Table.from_pandas(player_metadata_fixed_dataset)
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
 
@@ -50,8 +48,6 @@ def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, data
             delta_write_options={"schema_mode": "overwrite"},
             storage_options=storage_options
         )
-        #pyarrow_dataset = pa.Table.from_pandas(dataset)
-        #write_deltalake(f"abfss://{container_name}@{adls_url}/bronze/{data_source}", pyarrow_dataset, storage_options=storage_options, mode='append', schema_mode='merge', engine='rust')
         logging.info("Dataset has been inserted into bronze layer")
     except Exception as e:
         logging.error(f"An error occured: {str(e)}")
@@ -102,6 +98,41 @@ def check_data_types(df):
     return data_types
 
 
+def get_json_column_list(df):
+    return df.columns
+
+
+def get_landing_column_list(credential, layer, data_source):
+    try:
+        container_name = os.getenv("StorageAccountContainer")
+        StorageAccountName = os.getenv("StorageAccountName")
+        azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/{layer}/{data_source}"
+        logging.info(f"Reading {azure_path}")
+        dataset = pl.read_delta(azure_path, storage_options=credential)
+        landing_column_list = dataset.columns
+        item_to_remove = {'ingest_date'}
+        landing_column_list = list(filter(lambda x: x not in item_to_remove, landing_column_list))
+        logging.info(f"Removed column: {item_to_remove}")
+        return landing_column_list
+    except Exception as e:
+        logging.error(f"Removed column fails: {str(e)}")
+    
+
+
+def compare_columns(landing_column_list, json_column_list):
+    landing_set = set(landing_column_list)
+    json_set = set(json_column_list)
+    if sorted(landing_column_list) == sorted(json_column_list):
+        logging.info("All columns match")
+    else:
+        missing_in_json = landing_set - json_set
+        missing_in_landing = json_set - landing_set
+        if missing_in_json:
+            logging.error(f"Columns missing in JSON: {missing_in_json}")
+        if missing_in_landing:
+            logging.error(f"Columns missing in landing: {missing_in_landing}")
+
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
 
@@ -121,21 +152,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         container_name = os.getenv("StorageAccountContainer")
-        adls_url = os.getenv("DataLakeUrl")
         adls_url_v2 = os.getenv("DataLakeUrllll")
-        #file_date = convert_timestamp_to_myt_date()
-        #file_date = '05072024'
-        file_name = f"{data_source_type}_{file_date}.json"
-        #azure_dev_key_vault_url = os.getenv("KeyVault")
-
-        #credentials = DefaultAzureCredential()
-        #service_client = DataLakeServiceClient(account_url=adls_url, credential=credentials)
-        #password = create_storage_options(azure_dev_key_vault_url)
         password = create_storage_options(os.getenv('KeyVault'))
-        #print(password)
         x = read_file_from_adls_using_polars(password, data_source_type, file_date)
-        #directory_client = service_client.get_file_system_client(container_name).get_directory_client(f"landing/{data_source_type}/current/{file_date}")
-        #current_season_dataset = read_file_from_adls(directory_client, file_name)
+        json_column_list = get_json_column_list(x)
+        bronze_column_list = get_landing_column_list(password, 'bronze', data_source_type)
+        compare_columns(bronze_column_list, json_column_list)
         current_season_dataset_new = add_load_date_column(x, file_date)
         if data_source_type == "player_metadata":
             player_metadata_dataset = handle_inconsistent_columns_new(current_season_dataset_new)
@@ -144,7 +166,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             player_metadata_dataset = handle_inconsistent_columns_new(current_season_dataset_new)
             write_raw_to_bronze(player_metadata_dataset, password, container_name, adls_url_v2, data_source_type)
     
-        return func.HttpResponse(f"Data has been uploaded into bronze layer for data source - {data_source_type}", status_code=200)
+        return func.HttpResponse(f"Data has been uploaded into bronze layer for data source - {bronze_column_list}", status_code=200)
     
     except Exception as e:
         return func.HttpResponse(f"An error occured: {str(e)}", status_code=500)
