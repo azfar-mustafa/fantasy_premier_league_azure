@@ -249,13 +249,12 @@ def convert_column_datatype_team_metadata(df):
 
 
 
-def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, layer, data_source):
+def write_bronze_to_silver(dataset, storage_options, container_name, adls_url, layer, data_source):
     try:
         #write_deltalake(f"abfss://{container_name}@{adls_url}.dfs.core.windows.net/{layer}/{data_source}", dataset, storage_options=storage_options, mode='overwrite', engine='rust', schema_mode='overwrite', schema=column)
         dataset.write_delta(
             f"abfss://{container_name}@{adls_url}.dfs.core.windows.net/{layer}/{data_source}",
-            mode="overwrite",
-            delta_write_options={"schema_mode": "overwrite"},
+            mode="append",
             storage_options=storage_options
         )
         logging.info(f"Dataset has been inserted into {layer} layer")
@@ -357,7 +356,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         new_dataset = add_season_to_dataset(converted_column_dataset, file_date)
         #   logging.info(f"Season {create_season_value(file_date)} has been added to the dataset")
         #convert_dataset = convert_ingest_date_column_to_bigint(new_dataset)
-        write_raw_to_bronze(new_dataset, password, container_name, adls_url, silver_layer, data_source_type)
+        write_bronze_to_silver(new_dataset, password, container_name, adls_url, silver_layer, data_source_type)
 
         #print(str(convert_dataset.select('row_inserted_timestamp').head(5)), errors='replace')
         #   logging.info(f"{data_source_type} data for date {file_date} has been written to silver layer")
