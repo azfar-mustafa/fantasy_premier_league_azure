@@ -33,7 +33,7 @@ def read_local_file(local_temp_file_path):
     player_result = []
     try:
         with open(local_temp_file_path, "r") as json_file:
-            main_json_file = json.load(json_file)
+            main_json_file = [json.loads(line) for line in json_file] 
 
         for id_player in main_json_file:
                 player_id = id_player.get("id")
