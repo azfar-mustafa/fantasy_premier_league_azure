@@ -68,11 +68,18 @@ def convert_column_datatype_current_season_history(df):
         'transfers_in': pl.Int64,
         'transfers_out': pl.Int64,
         'modified': pl.String,
-        'ingest_date': pl.String
+        'ingest_date': pl.String,
+        'mng_clean_sheets': pl.String,
+        'mng_draw': pl.String,
+        'mng_goals_scored': pl.String,
+        'mng_loss': pl.String,
+        'mng_underdog_draw': pl.String,
+        'mng_underdog_win': pl.String,
+        'mng_win': pl.String
     }
 
     df = df.with_columns([
-        pl.col(col_name).cast(dtype)
+        pl.col(col_name).replace("null", None).cast(dtype)
         for col_name, dtype in dtype_mapping.items()
     ])
 
@@ -171,7 +178,22 @@ def convert_column_datatype_player_metadata(df):
         'selected_rank_type': pl.Int64,
         'starts_per_90': pl.Float64,
         'clean_sheets_per_90': pl.Float64,
-        'ingest_date': pl.Int64
+        'ingest_date': pl.Int64,
+        'birth_date': pl.String,
+        'can_select': pl.String,
+        'can_transact': pl.String,
+        'has_temporary_code': pl.String,
+        'mng_clean_sheets': pl.String,
+        'mng_draw': pl.String,
+        'mng_goals_scored': pl.String,
+        'mng_loss': pl.String,
+        'mng_underdog_draw': pl.String,
+        'mng_underdog_win': pl.String,
+        'mng_win': pl.String,
+        'opta_code': pl.String,
+        'region': pl.String,
+        'removed': pl.String,
+        'team_join_date': pl.String
     }
 
     df = df.with_columns([
