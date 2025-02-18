@@ -5,7 +5,7 @@ import requests
 import os
 import json
 from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, ContainerClient, BlobPrefix
 from util.common_func import convert_timestamp_to_myt_date
 
 
@@ -68,6 +68,22 @@ def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_
         blob_client.upload_blob(data, overwrite=True)
 
     logging.info(f"Current season history data has been uploaded to {destination_blob_path}")
+
+
+def get_blob_name(storage_account_url, container_name):
+    default_credential = DefaultAzureCredential()
+    blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
+    container_client = blob_service_client.get_container_client(container=container_name)
+
+    blob_list = container_client.list_blob_names(name_starts_with=f'landing/raw_fpl_player_metadata_')
+
+    for blob in blob_list:
+        logging.info(f"File name: {blob}")
+        blob_name = blob.split("landing/")[-1]
+
+    return blob_name
+
+    
     
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
@@ -78,19 +94,21 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         if not ingest_date:
             return func.HttpResponse(
-                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be ddMMyyyy",
+                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be YYYYMMDD",
                 status_code=400
             )
         
+        current_timestamp = convert_timestamp_to_myt_date()
+        
         storage_account_url = os.getenv("StorageAccountUrl")
         storage_account_container = os.getenv("StorageAccountContainer")
-        blob_name = f"player_metadata_{ingest_date}.json"
-        current_season_history_file_name = f"current_season_history_{ingest_date}.json"
-        source_blob_path = f"landing/player_metadata/current/{ingest_date}/{blob_name}"
-        destination_blob_path = f"landing/current_season_history/current/{ingest_date}/{current_season_history_file_name}"
+        player_metadata_file_name = get_blob_name(storage_account_url, storage_account_container)
+        current_season_history_file_name = f"raw_fpl_current_season_history_{ingest_date}_{current_timestamp}.json"
+        source_blob_path = f"landing/{player_metadata_file_name}"
+        destination_blob_path = f"landing/{current_season_history_file_name}"
         
         local_file_path = tempfile.gettempdir()
-        local_temp_file_path = os.path.join(local_file_path, blob_name)
+        local_temp_file_path = os.path.join(local_file_path, player_metadata_file_name)
         player_id_local_file_path = os.path.join(local_file_path, current_season_history_file_name)
     
         download_blob(storage_account_url, storage_account_container, local_temp_file_path, source_blob_path)

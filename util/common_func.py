@@ -10,7 +10,7 @@ def convert_timestamp_to_myt_date():
     utc_timezone = pytz.timezone("UTC")
     myt_timezone = pytz.timezone("Asia/Kuala_Lumpur")
     myt_timestamp = utc_timezone.localize(current_utc_timestamp).astimezone(myt_timezone)
-    formatted_timestamp = myt_timestamp.strftime("%d%m%Y")
+    formatted_timestamp = myt_timestamp.strftime("%H%M%S")
     return formatted_timestamp
 
 

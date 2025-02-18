@@ -40,12 +40,12 @@ def create_json_data(file_path, file_name_json, data):
     logging.info(f"{file_path} data is created")
 
 
-def create_blob_directory(local_filepath, file_name_json, attribute_name, current_date, storage_account_url, storage_account_container):
+def create_blob_directory(local_filepath, file_name_json, storage_account_url, storage_account_container):
     try:
         default_credential = DefaultAzureCredential()
         blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
         container_client = blob_service_client.get_container_client(storage_account_container)
-        blob_client = container_client.get_blob_client(f"landing/{attribute_name}/current/{current_date}/{file_name_json}")
+        blob_client = container_client.get_blob_client(f"landing/{file_name_json}")
         with open(f"{local_filepath}/{file_name_json}", "rb") as data:
             blob_client.upload_blob(data, overwrite=True)
         return True
@@ -63,7 +63,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         if not ingest_date:
             return func.HttpResponse(
-                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be ddMMyyyy",
+                "No parameter supplied. Please provide a 'ingest_date' based on the file to be ingested. Date format should be YYYYMMDD",
                 status_code=400
             )
         
@@ -81,9 +81,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         if data:
                 zipped_api = zip(metadata, data)
                 for attribute_name,data in zipped_api:
-                    file_name_json = f"{attribute_name}_{ingest_date}.json"
+                    current_timestamp = convert_timestamp_to_myt_date()
+                    file_name_json = f"raw_fpl_{attribute_name}_{ingest_date}_{current_timestamp}.json"
                     create_json_data(local_filepath, file_name_json, data)
-                    create_blob_directory(local_filepath, file_name_json, attribute_name, ingest_date, storage_account_url, storage_account_container)
+                    create_blob_directory(local_filepath, file_name_json, storage_account_url, storage_account_container)
         return func.HttpResponse(f"Data from external API ingested successfully.", status_code=200)
     except Exception as e:
         return func.HttpResponse(f"An error occured: {str(e)}", status_code=500)
