@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 import pytz
 import os
 from azure.identity import DefaultAzureCredential
@@ -10,7 +11,7 @@ def convert_timestamp_to_myt_date():
     utc_timezone = pytz.timezone("UTC")
     myt_timezone = pytz.timezone("Asia/Kuala_Lumpur")
     myt_timestamp = utc_timezone.localize(current_utc_timestamp).astimezone(myt_timezone)
-    formatted_timestamp = myt_timestamp.strftime("%H%M%S")
+    formatted_timestamp = myt_timestamp.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_timestamp
 
 
@@ -52,5 +53,6 @@ def create_storage_options(azure_dev_key_vault_url):
         'azure_storage_client_secret': client_secret,
         'azure_storage_tenant_id': client_tenant_id,
     }
+    logging.info("Credentials has been created")
 
     return storage_options

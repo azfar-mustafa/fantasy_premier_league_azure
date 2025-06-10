@@ -7,9 +7,23 @@ import json
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContainerClient, BlobPrefix
 from util.common_func import convert_timestamp_to_myt_date
+from typing import Tuple, Dict, Any, Optional, List, Union
 
 
-def download_blob(storage_account_url, container_name, local_temp_file_path, source_blob_path):
+def download_blob(storage_account_url: str, container_name: str, local_temp_file_path: str, source_blob_path: str) -> bool:
+    """
+    Downloads a blob from Azure Blob Storage to a specified local temporary file path.
+
+    Args:
+        storage_account_url (str): The URL of the Azure Storage account (e.g., "https://youraccount.blob.core.windows.net").
+        container_name (str): The name of the container where the blob resides.
+        local_temp_file_path (str): The full local path, including the filename, where the blob will be saved.
+                                    (e.g., "C:/temp/downloaded_data.json").
+        source_blob_path (str): The full path of the blob within the container (e.g., "landing/my_data.json").
+
+    Returns:
+        bool: True if the blob was successfully downloaded, False otherwise.
+    """
     try:
         default_credential = DefaultAzureCredential()
         blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
@@ -29,7 +43,21 @@ def download_blob(storage_account_url, container_name, local_temp_file_path, sou
         return False
     
 
-def read_local_file(local_temp_file_path):
+def read_local_file(local_temp_file_path: str) -> Union[List[Dict[str, Any]], None]:
+    """
+    Reads a local JSONL file, extracts player IDs, fetches player summary data from an API,
+    and returns current season historical fixture data for all players.
+
+    Args:
+        local_temp_file_path (str): The full path to the local JSONL file
+                                    containing player ID information.
+
+    Returns:
+        Union[List[Dict[str, Any]], None]: A list of dictionaries, where each dictionary
+                                            represents a player's past fixture data for the
+                                            current season. Returns None if any error occurs
+                                            during file reading or API calls.
+    """
     player_result = []
     try:
         with open(local_temp_file_path, "r") as json_file:
@@ -53,7 +81,25 @@ def read_local_file(local_temp_file_path):
         raise
 
 
-def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_url, container_name, destination_blob_path):
+def create_file_and_upload(all_dict: List[Dict[str, Any]], player_id_local_file_path: str, storage_account_url: str, container_name: str, destination_blob_path: str) -> bool:
+    """
+    Writes a list of dictionaries to a local JSON Lines (JSONL) file and then uploads
+    that file to Azure Blob Storage.
+
+    Args:
+        all_dict (List[Dict[str, Any]]): A list of dictionaries to be written to the local file.
+        player_id_local_file_path (str): The full local path, including the filename,
+                                          where the JSONL file will be created.
+                                          (e.g., "C:/temp/players.jsonl").
+        storage_account_url (str): The URL of the Azure Storage account
+                                   (e.g., "https://youraccount.blob.core.windows.net").
+        container_name (str): The name of the target container in Blob Storage.
+        destination_blob_path (str): The full path for the blob within the container
+                                     (e.g., "processed_data/players.jsonl").
+
+    Returns:
+        bool: True if the file was successfully created locally and uploaded, False otherwise.
+    """
     with open(player_id_local_file_path, "w") as local_file_player_id:
         for item in all_dict:
             json_line = json.dumps(item)
@@ -70,7 +116,21 @@ def create_file_and_upload(all_dict, player_id_local_file_path, storage_account_
     logging.info(f"Current season history data has been uploaded to {destination_blob_path}")
 
 
-def get_blob_name(storage_account_url, container_name):
+def get_blob_name(storage_account_url: str, container_name: str) -> Optional[str]:
+    """
+    Connects to Azure Blob Storage, lists blobs starting with a specific prefix
+    ('landing/raw_fpl_player_metadata_'), and returns the name of the *last* found blob
+    after stripping the 'landing/' prefix.
+
+    Args:
+        storage_account_url (str): The URL of the Azure Storage account
+                                   (e.g., "https://youraccount.blob.core.windows.net").
+        container_name (str): The name of the container (file system) to search within.
+
+    Returns:
+        Optional[str]: The extracted name of the last matching blob (e.g., "raw_fpl_player_metadata_20250525.json"),
+                       or None if no matching blob is found or an error occurs.
+    """
     default_credential = DefaultAzureCredential()
     blob_service_client = BlobServiceClient(storage_account_url, credential=default_credential)
     container_client = blob_service_client.get_container_client(container=container_name)
