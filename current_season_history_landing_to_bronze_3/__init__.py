@@ -192,20 +192,23 @@ def compare_columns(delta_table_column_list: list, staging_column_list: list, da
     # Add column name in dictionary below for custom added column in bronze layer table
     ignore_columns = {'season', 'created_timestamp', 'player_current_season_history_key', 'player_team_key', 'player_position_key'}
 
-    landing_set = set(delta_table_column_list) - ignore_columns
-    json_set = set(staging_column_list) - ignore_columns
-    if sorted(landing_set) == sorted(json_set):
+    bronze_set = set(delta_table_column_list) - ignore_columns
+    staging_set = set(staging_column_list) - ignore_columns
+    if sorted(bronze_set) == sorted(staging_set):
         logging.info(f"All columns match between staging and bronze delta table for {data_source}")
+        return None
     else:
-        missing_in_json = landing_set - json_set
-        missing_in_landing = json_set - landing_set
-        if missing_in_json:
-            logging.error(f"Columns missing in JSON: {missing_in_json} for {data_source}")
-        if missing_in_landing:
-            logging.error(f"Columns missing in landing: {missing_in_landing} for {data_source}")
+        missing_in_staging = bronze_set - staging_set
+        missing_in_bronze = staging_set - bronze_set
+        if missing_in_staging:
+            logging.error(f"Columns missing in staging: {missing_in_staging} for {data_source}. Need to add custom columns in ignore_columns dictionary")
+            return None
+        if missing_in_bronze:
+            logging.error(f"Columns missing in bronze: {missing_in_bronze} for {data_source}. There is new column in staging table and data source.")
+            return missing_in_bronze
 
 
-def read_delta_table(credential: str, layer: str, data_source: str, column_list: list, azure_path: str) -> pl.DataFrame:
+def read_delta_table(credential: str, layer: str, data_source: str, column_list: list, azure_path: str, **kwargs) -> pl.DataFrame:
     """
     Return dataset based on selected columns
 
@@ -219,11 +222,21 @@ def read_delta_table(credential: str, layer: str, data_source: str, column_list:
     Returns:
         pl.DataFrame: Return the selected dataframe.
     """
-    delta_table_path = f"{azure_path}/{layer}/{data_source}"
-    logging.info(f"Reading {delta_table_path}")
-    dataset = pl.read_delta(delta_table_path, storage_options=credential)
-    logging.info(f"Reading data from delta table for {data_source} in {layer} layer")
-    selected_dataset = dataset.select(column_list)
+    columns_to_remove = kwargs.get('columns_to_remove', set())
+
+    if layer == "staging" and columns_to_remove:
+        final_column_list = [col for col in column_list if col not in columns_to_remove]
+        delta_table_path = f"{azure_path}/{layer}/{data_source}"
+        logging.info(f"Reading {delta_table_path}")
+        dataset = pl.read_delta(delta_table_path, storage_options=credential)
+        logging.info(f"Reading data from delta table for {data_source} in {layer} layer")
+        selected_dataset = dataset.select(final_column_list)
+    else:
+        delta_table_path = f"{azure_path}/{layer}/{data_source}"
+        logging.info(f"Reading {delta_table_path}")
+        dataset = pl.read_delta(delta_table_path, storage_options=credential)
+        logging.info(f"Reading data from delta table for {data_source} in {layer} layer")
+        selected_dataset = dataset.select(column_list)
 
     return selected_dataset
 
@@ -374,8 +387,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         season = create_season_value(file_date)
         staging_column_list = get_delta_table_column_list(password, 'staging', data_source_type, azure_path)
         bronze_column_list = get_delta_table_column_list(password, 'bronze', data_source_type, azure_path)
-        compare_columns(bronze_column_list, staging_column_list, data_source_type)
-        staging_df = read_delta_table(password, 'staging', data_source_type, staging_column_list, azure_path)
+        column_difference = compare_columns(bronze_column_list, staging_column_list, data_source_type)
+        staging_df = read_delta_table(password, 'staging', data_source_type, staging_column_list, azure_path, columns_to_remove=column_difference)
         current_season_dataset_season_new = add_season_column(staging_df, season)
         add_composite_key = create_composite_key(current_season_dataset_season_new, data_source_type)
         current_season_dataset_new = add_load_date_column(add_composite_key)
