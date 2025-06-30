@@ -1,3 +1,4 @@
+arro3-core==0.5.1
 azure-core==1.29.5
 azure-functions==1.17.0
 azure-identity==1.15.0
@@ -12,7 +13,8 @@ cffi==1.16.0
 charset-normalizer==3.3.2
 colorama==0.4.6
 cryptography==41.0.5
-deltalake==0.18.2
+deltalake==1.0.2
+Deprecated==1.2.18
 duckdb==1.0.0
 idna==3.4
 iniconfig==2.0.0
@@ -23,7 +25,7 @@ numpy==2.0.0
 packaging==24.1
 pandas==2.2.2
 pluggy==1.5.0
-polars==1.31.0
+polars==1.30.0
 portalocker==2.8.2
 pyarrow==17.0.0
 pyarrow-hotfix==0.6
@@ -37,3 +39,4 @@ six==1.16.0
 typing_extensions==4.8.0
 tzdata==2024.1
 urllib3==2.1.0
+wrapt==1.17.2
