@@ -12,7 +12,20 @@ import polars as pl
 from datetime import datetime
 
 
-def list_directory_contents(service_client, container_name, directory_name, data_source):
+def list_directory_contents(service_client: DataLakeServiceClient, container_name: str, directory_name: str, data_source: str, file_date: str) -> str:
+    """
+    Return a list containing file name based on the data source in landing folder
+
+    Args:
+        service_client (str): The credential to access ADLS2.
+        container_name (str): The container storing the source files.
+        directory_name (str): The path of source files in ADLS.
+        data_source (str): Data source type to be processed.
+        file_date (str): File date to be processed
+
+    Returns:
+        str: Source file name.
+    """
     file_list = []
     file_system_client = service_client.get_file_system_client(container_name)
     paths = file_system_client.get_paths(path=directory_name)
@@ -21,6 +34,8 @@ def list_directory_contents(service_client, container_name, directory_name, data
         file_name = path.name.removeprefix("landing/")
         if data_source in file_name:
             file_list.append(file_name)
+    
+    logging.info(f"{file_list}")
 
     if not file_list:
         error_message = f"No files matching {data_source} in landing folder"
@@ -33,59 +48,70 @@ def list_directory_contents(service_client, container_name, directory_name, data
         logging.info(f"File lists: {file_list}")
         raise Exception(error_message)
     
-    logging.info(f"{file_list}")
-
-    return file_list[0]
-
-
-
-def read_file_from_adls(directory_client, file_name):
-    file_client = directory_client.get_file_client(file_name)
-    download = file_client.download_file()
-    downloaded_bytes = download.readall() # Output is in raw bytes
-    logging.info("File is read from ADLS")
-    return pd.read_json(BytesIO(downloaded_bytes))
+    if file_date in file_list[0]:
+        logging.info(f"Source file for '{data_source}' exist for date '{file_date}'")
+        return file_list[0]
+    else:
+        error_message = f"There is no file for '{data_source}' in landing folder with date {file_date}"
+        logging.error(f"ERROR: {error_message}")
+        raise Exception(error_message)
 
 
-def read_file_from_adls_using_polars(credential, landing_file_name):
-    container_name = os.getenv("StorageAccountContainer")
-    StorageAccountName = os.getenv("StorageAccountName")
-    azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/landing/{landing_file_name}"
-    df = pl.read_ndjson(azure_path, storage_options=credential)
+def read_file_from_adls_using_polars(credential: str, landing_file_name: str, adls_path: str) -> pl.DataFrame:
+    """
+    Return dataframe based on data type source stored in json
+
+    Args:
+        credential (str): The credential to access ADLS2.
+        landing_file_name (str): The source file name in landing folder.
+        adls_path (str): The adls2 path.
+    Returns:
+        pl.DataFrame: Dataset source read from landing folder.
+    """
+    landing_source_file_path = f"{adls_path}/landing/{landing_file_name}"
+    df = pl.read_ndjson(landing_source_file_path, storage_options=credential)
 
     logging.info(f"Data from file {landing_file_name} can be read and stored in a dataframe")
 
     return df
 
 
-def handle_player_metadata_column(dataset):
-    try:
-        columns_to_fix = ['expected_goals_per_90', 'saves_per_90', 'expected_assists_per_90', 'expected_goal_involvements_per_90', 'expected_goals_conceded_per_90', 'goals_conceded_per_90', 'starts_per_90', 'clean_sheets_per_90']
-        # Handle the inconsistent columns
-        player_metadata_fixed_dataset = handle_inconsistent_columns(dataset, columns_to_fix)
-    except Exception as e:
-        logging.error(f"An error occured: {str(e)}")
+def write_raw_to_landing(dataset: pl.DataFrame, storage_options: str, adls_path: str, data_source: str) -> None:
+    """
+    Insert dataframe into staging delta table
 
-    return player_metadata_fixed_dataset
-
-
-
-def write_raw_to_bronze(dataset, storage_options, container_name, adls_url, data_source):
+    Args:
+        dataset (pl.DataFrame): Dataset from landing folder.
+        storage_options (str): The credential to access ADLS2.
+        adls_path (str): The adls2 path.
+        data_source (str): Data source type to be processed.
+    """
     try:
         dataset.write_delta(
-            f"abfss://{container_name}@{adls_url}/staging/{data_source}",
+            f"{adls_path}/staging/{data_source}",
             mode="overwrite",
             delta_write_options={
                 "schema_mode": "overwrite"
                 },
             storage_options=storage_options
         )
-        logging.info("Dataset has been inserted into staging layer")
+        logging.info(f"Dataset for {data_source} has been inserted into staging delta table")
     except Exception as e:
-        logging.error(f"An error occured: {str(e)}")
+        error_msg = f"An error occured: {str(e)}"
+        logging.error(error_msg)
+        raise (error_msg)
 
 
-def add_load_date_column(football_dataframe, ingest_date):
+def add_load_date_column(football_dataframe: pl.DataFrame, ingest_date: str) -> pl.DataFrame:
+    """
+    Return dataframe with addition column of ingest date and created timestamp
+
+    Args:
+        football_dataframe (pl.DataFrame): The dataset from landing folder.
+        ingest_date (str): The ingest date based on file date
+    Returns:
+        pl.DataFrame: Dataset source read from landing folder.
+    """
     created_timestamp = convert_timestamp_to_myt_date()
     df = football_dataframe.with_columns([
         pl.lit(ingest_date).alias('ingest_date'),
@@ -96,21 +122,15 @@ def add_load_date_column(football_dataframe, ingest_date):
     return df
 
 
-def handle_inconsistent_columns(df, columns_to_fix):
-    for column in columns_to_fix:
-        try:
-            # Try to convert to float, if fails, keep as is
-            df = df.with_columns([
-                pl.col(column).fill_null(0).cast(pl.Float64).alias(column)  # Cast column to float64
-            ])
-            logging.info(f"Converted column {column} to float")
-        except Exception as e:
-            # If conversion fails, we'll keep the column as is and log a warning
-            logging.warning(f"Could not convert column {column} to float64. Keeping original data type. Error: {e}")
-    return df
+def handle_inconsistent_null_value_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Cast all columns to string data type and fill in null
 
-
-def handle_inconsistent_null_value_columns(df):
+    Args:
+        df (pl.DataFrame): The dataset from landing folder.
+    Returns:
+        pl.DataFrame: Dataset source read from landing folder.
+    """
     for column in df.columns:
         try:
             # Replace Nulls with 'null' and cast to string (Utf8)
@@ -124,48 +144,20 @@ def handle_inconsistent_null_value_columns(df):
     return df
 
 
-def check_data_types(df):
-    data_types = df.dtypes.to_dict()
-    logging.info("Data types after handling inconsistent columns:")
-    for column, dtype in data_types.items():
-        logging.info(f"{column}: {dtype}")
-    return data_types
+def check_data_source(data_source: list, data_source_name: str) -> None:
+    """
+    Check input value of data source
 
-
-def get_json_column_list(df):
-    logging.info(f"INFO: List of columns - {df.columns}")
-    return df.columns
-
-
-def get_delta_table_column_list(credential, layer, data_source):
-    try:
-        container_name = os.getenv("StorageAccountContainer")
-        StorageAccountName = os.getenv("StorageAccountName")
-        azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net/{layer}/{data_source}"
-        logging.info(f"Reading {azure_path}")
-        dataset = pl.read_delta(azure_path, storage_options=credential)
-        delta_table_column_list = dataset.columns
-        item_to_remove = {'ingest_date'}
-        delta_table_column_list = list(filter(lambda x: x not in item_to_remove, delta_table_column_list))
-        logging.info(f"Removed column: {item_to_remove}")
-        return delta_table_column_list
-    except Exception as e:
-        logging.error(f"Removed column fails: {str(e)}")
-    
-
-
-def compare_columns(delta_table_column_list, landing_column_list):
-    landing_set = set(delta_table_column_list)
-    json_set = set(landing_column_list)
-    if sorted(delta_table_column_list) == sorted(landing_column_list):
-        logging.info("All columns match")
+    Args:
+        data_source (list): Contain list of data source name.
+        data_source_name (str): The input value of data source in API parameter.
+    """
+    if data_source_name in data_source:
+        logging.info(f"Input value of data source - '{data_source_name}' is correct.")
     else:
-        missing_in_json = landing_set - json_set
-        missing_in_landing = json_set - landing_set
-        if missing_in_json:
-            logging.error(f"Columns missing in JSON: {missing_in_json}")
-        if missing_in_landing:
-            logging.error(f"Columns missing in landing: {missing_in_landing}")
+        error_msg = f"Data source - '{data_source_name}' does not exists. Wrong value was input in the API parameter"
+        logging.error(error_msg)
+        raise ValueError(error_msg)
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
@@ -186,25 +178,23 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
+        data_source_list = ['current_season_history', 'player_metadata', 'team_metadata', 'position_metadata']
+        check_data_source(data_source_list, data_source_type)
+
         default_credential = DefaultAzureCredential()
+        StorageAccountName = os.getenv("StorageAccountName")
         container_name = os.getenv("StorageAccountContainer")
         adls_url_v2 = os.getenv("DataLakeUrllll")
         password = create_storage_options(os.getenv('KeyVault'))
+
+        azure_path = f"abfss://{container_name}@{StorageAccountName}.dfs.core.windows.net"
+
         service_client = DataLakeServiceClient(account_url=adls_url_v2, credential=default_credential)
-        landing_file_name = list_directory_contents(service_client,container_name,'landing/', data_source=data_source_type)
-        landing_df = read_file_from_adls_using_polars(password, landing_file_name)
-        #landing_column_list = get_json_column_list(landing_df)
-        #bronze_column_list = get_delta_table_column_list(password, 'bronze', data_source_type)
-        #compare_columns(bronze_column_list, landing_column_list)
+        landing_file_name = list_directory_contents(service_client, container_name,'landing/', data_source_type, file_date)
+        landing_df = read_file_from_adls_using_polars(password, landing_file_name, azure_path)
         current_season_dataset_new = add_load_date_column(landing_df, file_date)
         landing_data_to_load = handle_inconsistent_null_value_columns(current_season_dataset_new)
-        write_raw_to_bronze(landing_data_to_load, password, container_name, adls_url_v2, data_source_type)
-        #if data_source_type == "player_metadata":
-        #    player_metadata_dataset = handle_inconsistent_null_value_columns(current_season_dataset_new)
-        #    write_raw_to_bronze(player_metadata_dataset, password, container_name, adls_url_v2, data_source_type)
-        #else:
-        #    landing_data_to_load = handle_inconsistent_null_value_columns(current_season_dataset_new)
-        #    write_raw_to_bronze(landing_data_to_load, password, container_name, adls_url_v2, data_source_type)
+        write_raw_to_landing(landing_data_to_load, password, azure_path, data_source_type)
     
         return func.HttpResponse(f"Data has been uploaded into staging table for data source {data_source_type}", status_code=200)
     
